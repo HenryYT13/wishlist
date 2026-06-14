@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Wishlist</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-left">
+        <div class="logo-box"><i class="ph ph-gift"></i></div>
+        <div>
+          <h1 id="mainTitle" data-en="My Wishlist" data-vi="Danh Sách Mong Muốn">My Wishlist</h1>
+          <p class="subtitle" id="subTitle" data-en="Things I'd love to have" data-vi="Những thứ tôi muốn có">Things I'd love to have</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn-outline" id="themeToggle">
+          <i class="ph ph-moon" id="themeIcon"></i>
+        </button>
+        <button class="btn-outline" id="langToggle">
+          <i class="ph ph-globe"></i> <span id="langText">Tiếng Việt</span>
+        </button>
+        <button class="btn-dark" onclick="openModal()">+ Add Wish</button>
+      </div>
+    </header>
+
+    <main id="wishlistGrid" class="grid-container">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon"><i class="ph ph-gift"></i></div>
+        <p id="emptyText" data-en="No wishes yet. Add your first one!" data-vi="Chưa có điều ước nào. Hãy thêm một điều!">No wishes yet. Add your first one!</p>
+        <button class="btn-outline" onclick="openModal()">+ Add Wish</button>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="wishModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle" data-en="Add a new wish" data-vi="Thêm điều ước mới">Add a new wish</h2>
+        <button class="close-btn" onclick="closeModal()"><i class="ph ph-x"></i></button>
+      </div>
+      <form id="wishForm">
+        <div class="form-group">
+          <label id="lblItem" data-en="Item Name" data-vi="Tên món đồ">Item Name</label>
+          <input type="text" id="itemName" placeholder="e.g. Mechanical Keyboard" required>
+        </div>
+        
+        <div class="form-group">
+          <label id="lblLink" data-en="Link (optional)" data-vi="Liên kết (tùy chọn)">Link (optional)</label>
+          <input type="url" id="itemLink" placeholder="https://...">
+        </div>
+
+        <div class="form-group">
+          <div class="usefulness-header">
+            <label id="lblUse" data-en="Usefulness" data-vi="Độ hữu ích">Usefulness</label>
+            <span class="badge" id="useValue">7 / 10</span>
+          </div>
+          <p class="helper-text" id="lblUseSub" data-en="How useful is this to you?" data-vi="Món đồ này hữu ích thế nào với bạn?">How useful is this to you?</p>
+          <input type="range" id="itemUsefulness" min="1" max="10" value="7" oninput="document.getElementById('useValue').innerText = this.value + ' / 10'">
+          <div class="range-labels"><span>1</span><span>5</span><span>10</span></div>
+        </div>
+
+        <div class="form-group">
+          <label id="lblReason" data-en="Reason to Buy" data-vi="Lý do muốn mua">Reason to Buy</label>
+          <textarea id="itemReason" rows="3" placeholder="Why do you want this?" required></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-outline" onclick="closeModal()" id="btnCancel" data-en="Cancel" data-vi="Hủy">Cancel</button>
+          <button type="submit" class="btn-dark" id="btnSave" data-en="Save Wish" data-vi="Lưu điều ước">Save Wish</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
