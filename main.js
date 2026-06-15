@@ -122,7 +122,6 @@ async function renderItems() {
         let displayReason = item.reason;
 
         if (currentLang === 'vi') {
-            displayTitle = await translateText(item.name, 'vi');
             displayReason = await translateText(item.reason, 'vi');
         }
 
