@@ -75,12 +75,20 @@ function persistMeta() {
         meta[item.id] = {
             order_index: item.order_index,
             gotten: item.gotten || false,
-            gotten_how: item.gotten_how || ''
+            gotten_how: item.gotten_how || '',
+            name: item.name,
+            link: item.link,
+            usefulness: item.usefulness,
+            reason: item.reason
         };
         supabase.from('wishlist').update({
             order_index: item.order_index,
             gotten: item.gotten || false,
-            gotten_how: item.gotten_how || ''
+            gotten_how: item.gotten_how || '',
+            name: item.name,
+            link: item.link,
+            usefulness: item.usefulness,
+            reason: item.reason
         }).eq('id', item.id).then(() => {}).catch(() => {});
     });
     saveLocalMeta(meta);
@@ -166,7 +174,6 @@ async function translateText(text, targetLang) {
     }
 }
 
-// --- Fetch & Render ---
 async function fetchItems() {
     const { data, error } = await supabase.from('wishlist').select('*').order('created_at', { ascending: false });
     if (!error && data) {
@@ -175,6 +182,10 @@ async function fetchItems() {
             const itemMeta = meta[item.id] || {};
             return {
                 ...item,
+                ...(itemMeta.name ? { name: itemMeta.name } : {}),
+                ...(itemMeta.link !== undefined ? { link: itemMeta.link } : {}),
+                ...(itemMeta.usefulness !== undefined ? { usefulness: itemMeta.usefulness } : {}),
+                ...(itemMeta.reason ? { reason: itemMeta.reason } : {}),
                 order_index: item.order_index !== undefined && item.order_index !== null ? item.order_index : (itemMeta.order_index !== undefined ? itemMeta.order_index : idx),
                 gotten: item.gotten !== undefined && item.gotten !== null ? item.gotten : (itemMeta.gotten || false),
                 gotten_how: item.gotten_how !== undefined && item.gotten_how !== null ? item.gotten_how : (itemMeta.gotten_how || '')
@@ -216,7 +227,7 @@ async function renderItems() {
                 <div class="card-header">
                     <div class="title-with-edit">
                         <h3>${displayTitle}</h3>
-                        <button class="edit-btn" onclick="editItem(${item.id})" title="${currentLang === 'en' ? 'Edit wish' : 'Chỉnh sửa'}"><i class="ph ph-pencil-simple"></i></button>
+                        <button class="edit-btn" onclick="editItem('${item.id}')" title="${currentLang === 'en' ? 'Edit wish' : 'Chỉnh sửa'}"><i class="ph ph-pencil-simple"></i></button>
                     </div>
                     <span class="badge">${item.usefulness}/10</span>
                 </div>
@@ -230,10 +241,10 @@ async function renderItems() {
                 <div class="card-actions">
                     ${item.link ? `<a href="${item.link}" target="_blank"><i class="ph ph-arrow-square-out"></i> ${viewLabel}</a>` : '<span></span>'}
                     <div class="action-buttons">
-                        <button class="icon-btn check-btn ${item.gotten ? 'active' : ''}" onclick="toggleGot(${item.id})" title="${currentLang === 'en' ? 'Mark acquired' : 'Đánh dấu đã có'}"><i class="ph ph-check-circle"></i></button>
-                        <button class="icon-btn move-btn" onclick="moveUp(${item.id})" title="${currentLang === 'en' ? 'Move Up' : 'Chuyển lên'}"><i class="ph ph-arrow-up"></i></button>
-                        <button class="icon-btn move-btn" onclick="moveDown(${item.id})" title="${currentLang === 'en' ? 'Move Down' : 'Chuyển xuống'}"><i class="ph ph-arrow-down"></i></button>
-                        <button class="icon-btn delete-btn" onclick="deleteItem(${item.id})" title="${currentLang === 'en' ? 'Delete' : 'Xóa'}"><i class="ph ph-trash"></i></button>
+                        <button class="icon-btn check-btn ${item.gotten ? 'active' : ''}" onclick="toggleGot('${item.id}')" title="${currentLang === 'en' ? 'Mark acquired' : 'Đánh dấu đã có'}"><i class="ph ph-check-circle"></i></button>
+                        <button class="icon-btn move-btn" onclick="moveUp('${item.id}')" title="${currentLang === 'en' ? 'Move Up' : 'Chuyển lên'}"><i class="ph ph-arrow-up"></i></button>
+                        <button class="icon-btn move-btn" onclick="moveDown('${item.id}')" title="${currentLang === 'en' ? 'Move Down' : 'Chuyển xuống'}"><i class="ph ph-arrow-down"></i></button>
+                        <button class="icon-btn delete-btn" onclick="deleteItem('${item.id}')" title="${currentLang === 'en' ? 'Delete' : 'Xóa'}"><i class="ph ph-trash"></i></button>
                     </div>
                 </div>
             </div>
@@ -246,23 +257,26 @@ async function renderItems() {
 document.getElementById('wishForm').addEventListener('submit', (e) => {
     e.preventDefault();
     
+    const rawLink = document.getElementById('itemLink').value.trim();
     const itemData = {
-        name: document.getElementById('itemName').value,
-        link: document.getElementById('itemLink').value,
+        name: document.getElementById('itemName').value.trim(),
+        link: rawLink ? rawLink : null,
         usefulness: parseInt(document.getElementById('itemUsefulness').value),
-        reason: document.getElementById('itemReason').value
+        reason: document.getElementById('itemReason').value.trim()
     };
 
     if (editingItemId !== null) {
-        (async () => {
-            const { error } = await supabase.from('wishlist').update(itemData).eq('id', editingItemId);
-            if (!error) {
-                window.closeModal();
-                fetchItems();
-            } else {
-                alert("Failed to update item.");
-            }
-        })();
+        const idx = wishlistItems.findIndex(i => String(i.id) === String(editingItemId));
+        if (idx !== -1) {
+            wishlistItems[idx] = { ...wishlistItems[idx], ...itemData };
+        }
+        persistMeta();
+        renderItems();
+        window.closeModal();
+
+        supabase.from('wishlist').update(itemData).eq('id', editingItemId).then(({ error }) => {
+            if (error) console.warn("Supabase update error:", error.message);
+        });
     } else {
         requirePassword(async () => {
             const { error } = await supabase.from('wishlist').insert([itemData]);
@@ -278,7 +292,7 @@ document.getElementById('wishForm').addEventListener('submit', (e) => {
 
 window.editItem = (id) => {
     requirePassword(() => {
-        const item = wishlistItems.find(i => i.id === id);
+        const item = wishlistItems.find(i => String(i.id) === String(id));
         if (!item) return;
 
         editingItemId = id;
@@ -295,7 +309,7 @@ window.editItem = (id) => {
 
 window.moveUp = (id) => {
     requirePassword(() => {
-        const idx = wishlistItems.findIndex(i => i.id === id);
+        const idx = wishlistItems.findIndex(i => String(i.id) === String(id));
         if (idx <= 0) return;
 
         const tempOrder = wishlistItems[idx].order_index;
@@ -315,7 +329,7 @@ window.moveUp = (id) => {
 
 window.moveDown = (id) => {
     requirePassword(() => {
-        const idx = wishlistItems.findIndex(i => i.id === id);
+        const idx = wishlistItems.findIndex(i => String(i.id) === String(id));
         if (idx === -1 || idx >= wishlistItems.length - 1) return;
 
         const tempOrder = wishlistItems[idx].order_index;
@@ -335,7 +349,7 @@ window.moveDown = (id) => {
 
 window.toggleGot = (id) => {
     requirePassword(() => {
-        const item = wishlistItems.find(i => i.id === id);
+        const item = wishlistItems.find(i => String(i.id) === String(id));
         if (!item) return;
 
         if (item.gotten) {
