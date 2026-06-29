@@ -10,13 +10,41 @@ const ADMIN_PASSWORD = atob(adminPasswordBase64)
 
 let currentLang = 'en';
 let wishlistItems = [];
+let editingItemId = null;
+
+function updateModalText() {
+    const modalTitle = document.getElementById('modalTitle');
+    const btnSave = document.getElementById('btnSave');
+    if (editingItemId) {
+        modalTitle.setAttribute('data-en', 'Edit wish');
+        modalTitle.setAttribute('data-vi', 'Chỉnh sửa điều ước');
+        btnSave.setAttribute('data-en', 'Update Wish');
+        btnSave.setAttribute('data-vi', 'Cập nhật');
+    } else {
+        modalTitle.setAttribute('data-en', 'Add a new wish');
+        modalTitle.setAttribute('data-vi', 'Thêm điều ước mới');
+        btnSave.setAttribute('data-en', 'Save Wish');
+        btnSave.setAttribute('data-vi', 'Lưu điều ước');
+    }
+    if (modalTitle) modalTitle.innerText = modalTitle.getAttribute(`data-${currentLang}`);
+    if (btnSave) btnSave.innerText = btnSave.getAttribute(`data-${currentLang}`);
+}
 
 // Expose modal functions to global window so HTML onclick can reach them
-window.openModal = () => document.getElementById('wishModal').style.display = 'flex';
+window.openModal = () => {
+    editingItemId = null;
+    document.getElementById('wishForm').reset();
+    document.getElementById('useValue').innerText = '7 / 10';
+    updateModalText();
+    document.getElementById('wishModal').style.display = 'flex';
+};
+
 window.closeModal = () => {
     document.getElementById('wishModal').style.display = 'none';
     document.getElementById('wishForm').reset();
     document.getElementById('useValue').innerText = '7 / 10';
+    editingItemId = null;
+    updateModalText();
 };
 
 // --- Authentication Wrapper ---
@@ -147,7 +175,10 @@ async function renderItems() {
         htmlContent += `
             <div class="card">
                 <div class="card-header">
-                    <h3>${displayTitle}</h3>
+                    <div class="title-with-edit">
+                        <h3>${displayTitle}</h3>
+                        <button class="edit-btn" onclick="editItem(${item.id})" title="${currentLang === 'en' ? 'Edit wish' : 'Chỉnh sửa'}"><i class="ph ph-pencil-simple"></i></button>
+                    </div>
                     <span class="badge">${item.usefulness}/10</span>
                 </div>
                 <p>${displayReason}</p>
@@ -165,23 +196,52 @@ async function renderItems() {
 document.getElementById('wishForm').addEventListener('submit', (e) => {
     e.preventDefault();
     
-    requirePassword(async () => {
-        const newItem = {
-            name: document.getElementById('itemName').value,
-            link: document.getElementById('itemLink').value,
-            usefulness: parseInt(document.getElementById('itemUsefulness').value),
-            reason: document.getElementById('itemReason').value
-        };
+    const itemData = {
+        name: document.getElementById('itemName').value,
+        link: document.getElementById('itemLink').value,
+        usefulness: parseInt(document.getElementById('itemUsefulness').value),
+        reason: document.getElementById('itemReason').value
+    };
 
-        const { error } = await supabase.from('wishlist').insert([newItem]);
-        if (!error) {
-            window.closeModal();
-            fetchItems();
-        } else {
-            alert("Failed to add item.");
-        }
-    });
+    if (editingItemId !== null) {
+        (async () => {
+            const { error } = await supabase.from('wishlist').update(itemData).eq('id', editingItemId);
+            if (!error) {
+                window.closeModal();
+                fetchItems();
+            } else {
+                alert("Failed to update item.");
+            }
+        })();
+    } else {
+        requirePassword(async () => {
+            const { error } = await supabase.from('wishlist').insert([itemData]);
+            if (!error) {
+                window.closeModal();
+                fetchItems();
+            } else {
+                alert("Failed to add item.");
+            }
+        });
+    }
 });
+
+window.editItem = (id) => {
+    requirePassword(() => {
+        const item = wishlistItems.find(i => i.id === id);
+        if (!item) return;
+
+        editingItemId = id;
+        document.getElementById('itemName').value = item.name || '';
+        document.getElementById('itemLink').value = item.link || '';
+        document.getElementById('itemUsefulness').value = item.usefulness || 7;
+        document.getElementById('useValue').innerText = (item.usefulness || 7) + ' / 10';
+        document.getElementById('itemReason').value = item.reason || '';
+
+        updateModalText();
+        document.getElementById('wishModal').style.display = 'flex';
+    });
+};
 
 window.deleteItem = (id) => {
     requirePassword(async () => {
