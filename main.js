@@ -49,12 +49,41 @@ window.closeModal = () => {
 
 // --- Authentication Wrapper ---
 function requirePassword(actionCallback) {
+    if (sessionStorage.getItem('admin_unlocked') === 'true') {
+        actionCallback();
+        return;
+    }
     const userInput = prompt("Enter Admin Password to continue:");
     if (userInput === ADMIN_PASSWORD) {
+        sessionStorage.setItem('admin_unlocked', 'true');
         actionCallback();
     } else {
         alert("Incorrect password.");
     }
+}
+
+function getLocalMeta() {
+    return JSON.parse(localStorage.getItem('wishlist_meta') || '{}');
+}
+function saveLocalMeta(meta) {
+    localStorage.setItem('wishlist_meta', JSON.stringify(meta));
+}
+function persistMeta() {
+    const meta = getLocalMeta();
+    wishlistItems.forEach((item, index) => {
+        item.order_index = index;
+        meta[item.id] = {
+            order_index: item.order_index,
+            gotten: item.gotten || false,
+            gotten_how: item.gotten_how || ''
+        };
+        supabase.from('wishlist').update({
+            order_index: item.order_index,
+            gotten: item.gotten || false,
+            gotten_how: item.gotten_how || ''
+        }).eq('id', item.id).then(() => {}).catch(() => {});
+    });
+    saveLocalMeta(meta);
 }
 
 // api/verify.js
@@ -140,8 +169,18 @@ async function translateText(text, targetLang) {
 // --- Fetch & Render ---
 async function fetchItems() {
     const { data, error } = await supabase.from('wishlist').select('*').order('created_at', { ascending: false });
-    if (!error) {
-        wishlistItems = data;
+    if (!error && data) {
+        const meta = getLocalMeta();
+        wishlistItems = data.map((item, idx) => {
+            const itemMeta = meta[item.id] || {};
+            return {
+                ...item,
+                order_index: item.order_index !== undefined && item.order_index !== null ? item.order_index : (itemMeta.order_index !== undefined ? itemMeta.order_index : idx),
+                gotten: item.gotten !== undefined && item.gotten !== null ? item.gotten : (itemMeta.gotten || false),
+                gotten_how: item.gotten_how !== undefined && item.gotten_how !== null ? item.gotten_how : (itemMeta.gotten_how || '')
+            };
+        });
+        wishlistItems.sort((a, b) => a.order_index - b.order_index);
         renderItems();
     }
 }
@@ -173,7 +212,7 @@ async function renderItems() {
         }
 
         htmlContent += `
-            <div class="card">
+            <div class="card ${item.gotten ? 'is-gotten' : ''}">
                 <div class="card-header">
                     <div class="title-with-edit">
                         <h3>${displayTitle}</h3>
@@ -182,9 +221,20 @@ async function renderItems() {
                     <span class="badge">${item.usefulness}/10</span>
                 </div>
                 <p>${displayReason}</p>
+                ${item.gotten ? `
+                    <div class="gotten-banner">
+                        <i class="ph ph-check-circle-fill"></i>
+                        <span><strong>${currentLang === 'en' ? 'Acquired:' : 'Đã có:'}</strong> ${item.gotten_how || (currentLang === 'en' ? 'Got it!' : 'Đã sở hữu!')}</span>
+                    </div>
+                ` : ''}
                 <div class="card-actions">
                     ${item.link ? `<a href="${item.link}" target="_blank"><i class="ph ph-arrow-square-out"></i> ${viewLabel}</a>` : '<span></span>'}
-                    <button class="delete-btn" onclick="deleteItem(${item.id})"><i class="ph ph-trash"></i></button>
+                    <div class="action-buttons">
+                        <button class="icon-btn check-btn ${item.gotten ? 'active' : ''}" onclick="toggleGot(${item.id})" title="${currentLang === 'en' ? 'Mark acquired' : 'Đánh dấu đã có'}"><i class="ph ph-check-circle"></i></button>
+                        <button class="icon-btn move-btn" onclick="moveUp(${item.id})" title="${currentLang === 'en' ? 'Move Up' : 'Chuyển lên'}"><i class="ph ph-arrow-up"></i></button>
+                        <button class="icon-btn move-btn" onclick="moveDown(${item.id})" title="${currentLang === 'en' ? 'Move Down' : 'Chuyển xuống'}"><i class="ph ph-arrow-down"></i></button>
+                        <button class="icon-btn delete-btn" onclick="deleteItem(${item.id})" title="${currentLang === 'en' ? 'Delete' : 'Xóa'}"><i class="ph ph-trash"></i></button>
+                    </div>
                 </div>
             </div>
         `;
@@ -240,6 +290,71 @@ window.editItem = (id) => {
 
         updateModalText();
         document.getElementById('wishModal').style.display = 'flex';
+    });
+};
+
+window.moveUp = (id) => {
+    requirePassword(() => {
+        const idx = wishlistItems.findIndex(i => i.id === id);
+        if (idx <= 0) return;
+
+        const tempOrder = wishlistItems[idx].order_index;
+        wishlistItems[idx].order_index = wishlistItems[idx - 1].order_index;
+        wishlistItems[idx - 1].order_index = tempOrder;
+
+        if (wishlistItems[idx].order_index === wishlistItems[idx - 1].order_index) {
+            wishlistItems[idx].order_index = idx - 1;
+            wishlistItems[idx - 1].order_index = idx;
+        }
+
+        wishlistItems.sort((a, b) => a.order_index - b.order_index);
+        persistMeta();
+        renderItems();
+    });
+};
+
+window.moveDown = (id) => {
+    requirePassword(() => {
+        const idx = wishlistItems.findIndex(i => i.id === id);
+        if (idx === -1 || idx >= wishlistItems.length - 1) return;
+
+        const tempOrder = wishlistItems[idx].order_index;
+        wishlistItems[idx].order_index = wishlistItems[idx + 1].order_index;
+        wishlistItems[idx + 1].order_index = tempOrder;
+
+        if (wishlistItems[idx].order_index === wishlistItems[idx + 1].order_index) {
+            wishlistItems[idx].order_index = idx + 1;
+            wishlistItems[idx + 1].order_index = idx;
+        }
+
+        wishlistItems.sort((a, b) => a.order_index - b.order_index);
+        persistMeta();
+        renderItems();
+    });
+};
+
+window.toggleGot = (id) => {
+    requirePassword(() => {
+        const item = wishlistItems.find(i => i.id === id);
+        if (!item) return;
+
+        if (item.gotten) {
+            if (confirm(currentLang === 'en' ? "Unmark this item as acquired?" : "Bỏ đánh dấu đã sở hữu món đồ này?")) {
+                item.gotten = false;
+                item.gotten_how = '';
+                persistMeta();
+                renderItems();
+            }
+        } else {
+            const promptMsg = currentLang === 'en' ? "Awesome! How did you get this item?" : "Tuyệt vời! Bạn đã có món đồ này bằng cách nào?";
+            const howGot = prompt(promptMsg, currentLang === 'en' ? "Bought it / Gift" : "Đã mua / Được tặng");
+            if (howGot !== null) {
+                item.gotten = true;
+                item.gotten_how = howGot;
+                persistMeta();
+                renderItems();
+            }
+        }
     });
 };
 
