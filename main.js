@@ -29,6 +29,25 @@ function requirePassword(actionCallback) {
     }
 }
 
+// api/verify.js
+export default function handler(req, res) {
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method Not Allowed' });
+  }
+
+  const { password } = req.body;
+  
+  // Set this exact environment variable inside your Vercel Project Settings
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD; 
+
+  if (password === ADMIN_PASSWORD) {
+    res.status(200).json({ success: true });
+  } else {
+    res.status(401).json({ success: false });
+  }
+}
+
 // --- Theme Engine Setup ---
 const currentTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 document.documentElement.setAttribute('data-theme', currentTheme);
